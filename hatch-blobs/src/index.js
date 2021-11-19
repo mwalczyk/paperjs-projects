@@ -206,15 +206,15 @@ function wiggle(line, stops = 10, freq = 5, amp = 1) {
 
 function presetCover(center, radius, path) {
     const total = path.bounds.width;
-    const steps = random(10, 20);
-    const div = total / steps;
-    const offset = new Point(div, 0);
+    let steps = random(10, 20);
+    let div = total / steps;
+    let offset = new Point(div, 0);
 
     // Set up clipping path and group
     let clipPath = new Path();
     clipPath.copyContent(path);
     clipPath.clipMask = true;
-    applyNoiseToPath(clipPath, 6, 30, 5);
+    applyNoiseToPath(clipPath, 6, 30, 15);
 
     let clipGroup = new Group();
     clipGroup.addChild(clipPath);
@@ -224,11 +224,18 @@ function presetCover(center, radius, path) {
     for (let i = 0; i < steps; i++) {
         let a = path.bounds.topLeft.add(offset.multiply(i));
         let b = path.bounds.bottomLeft.add(offset.multiply(i));
+        let d = a.getDistance(b);
+        let wiggleSteps = Math.floor(d / div);
 
         let hatch = new Path.Line(a, b);
         hatch.strokeColor = 'black';
+        wiggle(hatch, wiggleSteps);
 
-        wiggle(hatch);
+        if (random() < 0.125) {
+            let scribble = hatch.clone();
+            wiggle(scribble, wiggleSteps, 3, 2);
+            hatchGroup.addChild(scribble);
+        }
 
         hatchGroup.addChild(hatch);
     }
@@ -237,10 +244,34 @@ function presetCover(center, radius, path) {
 
     // Maybe add another version going the other way
     if (random() < 0.5) {
-        let crossHatchGroup = new Group();
-        crossHatchGroup.copyContent(hatchGroup);
-        crossHatchGroup.rotate(random(70, 110));
-        clipGroup.addChild(crossHatchGroup);
+
+        // Use the same div as other direction, but recalc number of steps needed
+        steps = Math.ceil(path.bounds.height / div);
+        offset = new Point(0, div);
+        let shift = new Point(random(-div, div), 0);
+        
+        let rotated = new Group();
+
+        for (let i = 0; i < steps; i++) {   
+            let a = path.bounds.topLeft.add(offset.multiply(i));
+            let b = path.bounds.topRight.add(offset.multiply(i));
+            let d = a.getDistance(b);
+            let wiggleSteps = Math.floor(d / div);
+    
+            let hatch = new Path.Line(a, b);
+            hatch.strokeColor = 'black';
+            wiggle(hatch, wiggleSteps);
+            
+            if (random() < 0.125) {
+                let scribble = hatch.clone();
+                wiggle(scribble, wiggleSteps, 3, 2);
+                rotated.addChild(scribble);
+            }
+
+            rotated.addChild(hatch);
+        }
+        rotated.rotate(random(-20, 20));
+        hatchGroup.addChild(rotated);
     }
 
     let angle = random(-10, 10);
@@ -258,7 +289,6 @@ function presetCrossHatch(center, radius, path) {
 
     let clipGroup = new Group();
     clipGroup.addChild(clipPath);
-
 
     // How many distinct, directional hatching layers to add
     let numLayers = Math.floor(random(1, 4));
@@ -307,7 +337,7 @@ function presetCrossHatch(center, radius, path) {
             
             // Create a single "hatch" stroke line
             let hatch = new Path.Line(start, end);
-            hatch.rotate(angle, start);
+            hatch.rotate(angle);//, start);
             hatch.strokeColor = 'black';
             wiggle(hatch);
 
@@ -320,6 +350,74 @@ function presetCrossHatch(center, radius, path) {
 
     }
 }
+
+function presetStar(center, radius, path) {
+    // Create a copy that we'll use ask a clip mask
+    let clipPath = new Path();
+    clipPath.copyContent(path);
+    clipPath.clipMask = true;
+
+    let clipGroup = new Group();
+    clipGroup.addChild(clipPath);
+
+    const length = Math.max(path.bounds.width, path.bounds.height);
+    let steps = Math.floor(random(1, 15));
+    let div = 360 / steps;
+    for (let i = 0; i < steps; i++) {
+        const a = center.add(new Point(-length, 0));
+        const b = center.add(new Point(length, 0));
+        const d = a.getDistance(b);
+        let wiggleSteps = Math.floor(d / 5);
+
+        let star = new Path.Line(a, b);
+        star.strokeColor = 'black';
+        wiggle(star, wiggleSteps);
+        applyNoiseToPath(star, 6, random(10, 50), random(1, 10));
+        
+        star.rotate(i * div);
+        star.translate(new Point(random(1, 5), random(1, 5)));
+        clipGroup.addChild(star);
+    }
+}
+
+function presetFlow(center, radius, path) {
+    const total = path.bounds.width;
+    let steps = random(3, 10);
+    let div = total / steps;
+    let offset = new Point(div, 0);
+
+    // Set up clipping path and group
+    let clipPath = new Path.Rectangle(path.bounds);
+    clipPath.clipMask = true;
+    applyNoiseToPath(clipPath, 6, 30, 50);
+
+    let clipGroup = new Group();
+    clipGroup.addChild(clipPath);
+    
+    let hatchGroup = new Group();
+
+    for (let i = 0; i < steps; i++) {
+        let a = path.bounds.topLeft.add(offset.multiply(i));
+        let b = path.bounds.bottomLeft.add(offset.multiply(i));
+        let d = a.getDistance(b);
+        let wiggleSteps = Math.floor(d / 5);
+
+        let hatch = new Path.Line(a, b);
+        hatch.strokeColor = 'black';
+        wiggle(hatch, wiggleSteps, 30, 10);
+
+        if (random() < 0.125) {
+            let scribble = hatch.clone();
+            wiggle(scribble, wiggleSteps, 3, 2);
+            hatchGroup.addChild(scribble);
+        }
+
+        hatchGroup.addChild(hatch);
+    }
+    hatchGroup.rotate(random(0, 360));
+    clipGroup.addChild(hatchGroup);
+}
+
 
 function drawRock(rect) {
     const padding = 0.75;
@@ -344,10 +442,24 @@ function drawRock(rect) {
     applyNoiseToPath(path, 6, 20, 5);
 
     // Shade the rock somehow
-    if (random() < 0.5) {
+    let choice = random();
+    if (choice < 0.33) {
+        
         presetCrossHatch(center, radius, path);
-    } else {
+        
+    } else if (choice < 0.8) {
+   
         presetCover(center, radius, path);
+
+    } else if (choice < 0.9) {
+
+        presetStar(center, radius, path);
+
+        path.strokeColor = null;
+    } else {
+
+        presetFlow(center, radius, path);
+        path.strokeColor = null;
     }
 
     // Create another scribble copy
@@ -376,7 +488,7 @@ function drawRock(rect) {
     }
 }
 
-const maxLevels = 6;
+const maxLevels = 8;
 
 function rectanglePacking(rect, leaves, level) {
     if (level > maxLevels) {
@@ -386,9 +498,19 @@ function rectanglePacking(rect, leaves, level) {
     const w = rect.width;
     const h = rect.height;
 
-    const splitDirection =  (w > h);//   random() < 0.5;
-    const splitPercent = random(0.33, 0.66);
+    // Sometimes, don't split further even if we haven't reached the max level
+    const minLevelToBeLeaf = 2;
+    if (level > minLevelToBeLeaf && random() < 0.25) {
+        let leaf = rect.clone();
+        leaf.isLeaf = true;
+        leaves.push(leaf);
+        return;
+    }
 
+    const splitDirection = random() < 0.75 ?
+        w > h :
+        random() < 0.5;
+    const splitPercent = random(0.33, 0.66);
 
     if (splitDirection) {
         // Split vertically
@@ -396,8 +518,10 @@ function rectanglePacking(rect, leaves, level) {
         let divider = rect.topLeft.add(displacement.multiply(splitPercent));
         let a = new Rectangle(rect.topLeft, new Size(w * splitPercent, h));
         let b = new Rectangle(divider, new Size(w * (1 - splitPercent), h));
-        a.level = level;
-        b.level = level;
+        if (level === maxLevels - 1) {
+            a.isLeaf = true;
+            b.isLeaf = true;
+        }
         leaves.push(a, b);
         
         rectanglePacking(a, leaves, level + 1);
@@ -408,8 +532,10 @@ function rectanglePacking(rect, leaves, level) {
         let divider = rect.topLeft.add(displacement.multiply(splitPercent));
         let a = new Rectangle(rect.topLeft, new Size(w, h * splitPercent));
         let b = new Rectangle(divider, new Size(w, h * (1 - splitPercent)));
-        a.level = level;
-        b.level = level;
+        if (level === maxLevels - 1) {
+            a.isLeaf = true;
+            b.isLeaf = true;
+        }
         leaves.push(a, b);
         
         rectanglePacking(a, leaves, level + 1);
@@ -430,7 +556,7 @@ window.onload = function() {
     let leaves = [];
     rectanglePacking(view.bounds.scale(0.75), leaves, 0);
     leaves.forEach(leaf => {
-        if (leaf.level === maxLevels) {
+        if (leaf.isLeaf) {
             let path = new Path.Rectangle(leaf);
             //path.strokeColor = 'black';
             
