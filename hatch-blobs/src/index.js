@@ -147,6 +147,7 @@ class ClassicalNoise {
 const noise = new ClassicalNoise();
 const noiseSeed = Math.random() * 255;
 
+// TODO: turned off smoothing here
 function applyNoiseToPath(path, sampleDist, noiseDivisions, noiseScale) {
     if (path instanceof Group) {
         for(let i = 0; i < path.children.length; i++) {
@@ -174,7 +175,7 @@ function applyNoiseToPath(path, sampleDist, noiseDivisions, noiseScale) {
             path.segments[i].point = path.segments[i].point.add((new Point(noiseX, noiseY)).multiply(noiseScale));
         }
 
-        path.smooth();
+       // path.smooth();
     }
 }
 
@@ -238,7 +239,7 @@ function presetCover(center, radius, path) {
     if (random() < 0.5) {
         let crossHatchGroup = new Group();
         crossHatchGroup.copyContent(hatchGroup);
-        crossHatchGroup.rotate(random(0, 180));
+        crossHatchGroup.rotate(random(70, 110));
         clipGroup.addChild(crossHatchGroup);
     }
 
@@ -299,6 +300,10 @@ function presetCrossHatch(center, radius, path) {
             // face *outwards* not *inwards*
             let start = path.getPointAt(t);
             let end = start.add(averageNormal.multiply(-hatchLength));
+
+            // if (!path.contains(end)) {
+            //     end = start.add(averageNormal.multiply(hatchLength));
+            // }
             
             // Create a single "hatch" stroke line
             let hatch = new Path.Line(start, end);
@@ -316,10 +321,21 @@ function presetCrossHatch(center, radius, path) {
     }
 }
 
-function drawRock(center, radius) {
+function drawRock(rect) {
+    const padding = 0.75;
+    const center = rect.center;
+    const radius = Math.min(rect.width, rect.height) * 0.5 * padding;
+    
     // The base shape
-    let path = new Path.RegularPolygon(center, 50, radius);
+    const numSides = Math.floor(random(4, 50));
+    let path = new Path.RegularPolygon(center, numSides, radius);
     path.strokeColor = 'black';
+
+    if (rect.width > rect.height) {
+        path.scale(1.5, 1.0);
+    } else {
+        path.scale(1, 1.5);
+    }
 
     // Coarse noise
     applyNoiseToPath(path, 6, 60, 20);
@@ -334,22 +350,72 @@ function drawRock(center, radius) {
         presetCover(center, radius, path);
     }
 
+    // Create another scribble copy
+    let copy = path.clone();
+    wiggle(copy, 200, 30, 3);
+
     // Add "doughnut hole"
     if (random() < 0.25) {
         
         let cutout = new Path.RegularPolygon(
             center, 
             Math.floor(random(3, 7)), 
-            random(radius * 0.1, radius * 0.25));
+            random(radius * 0.25, radius * 0.45));
 
         cutout.fillColor = 'white';  
         cutout.strokeColor = 'black';
         wiggle(cutout, 100, 10, 3);
 
+        // Create another scribble copy
+        let copy = cutout.clone();
+        wiggle(copy, 200, 30, 3);
+
         // TODO: there should be a way to do this? Can't do before presets above because
         // normal calculation fails for compound paths
         //path = path.subtract(cutout);
     }
+}
+
+const maxLevels = 6;
+
+function rectanglePacking(rect, leaves, level) {
+    if (level > maxLevels) {
+        return;
+    }
+    
+    const w = rect.width;
+    const h = rect.height;
+
+    const splitDirection =  (w > h);//   random() < 0.5;
+    const splitPercent = random(0.33, 0.66);
+
+
+    if (splitDirection) {
+        // Split vertically
+        const displacement = rect.topRight.subtract(rect.topLeft);
+        let divider = rect.topLeft.add(displacement.multiply(splitPercent));
+        let a = new Rectangle(rect.topLeft, new Size(w * splitPercent, h));
+        let b = new Rectangle(divider, new Size(w * (1 - splitPercent), h));
+        a.level = level;
+        b.level = level;
+        leaves.push(a, b);
+        
+        rectanglePacking(a, leaves, level + 1);
+        rectanglePacking(b, leaves, level + 1);
+    } else {
+        // Split vertically
+        const displacement = rect.bottomLeft.subtract(rect.topLeft);
+        let divider = rect.topLeft.add(displacement.multiply(splitPercent));
+        let a = new Rectangle(rect.topLeft, new Size(w, h * splitPercent));
+        let b = new Rectangle(divider, new Size(w, h * (1 - splitPercent)));
+        a.level = level;
+        b.level = level;
+        leaves.push(a, b);
+        
+        rectanglePacking(a, leaves, level + 1);
+        rectanglePacking(b, leaves, level + 1);
+    }
+
 }
 
 
@@ -361,15 +427,20 @@ window.onload = function() {
 
     const center = view.center;
 
-    let drawableRegion = view.bounds.scale(0.5);
-    for (let i = 0; i < 10; i++) {
-        let center = randomPointInRectangle(drawableRegion);
-        let radius = random(20, 100);
-        drawRock(center, radius);
-    }
-    
+    let leaves = [];
+    rectanglePacking(view.bounds.scale(0.75), leaves, 0);
+    leaves.forEach(leaf => {
+        if (leaf.level === maxLevels) {
+            let path = new Path.Rectangle(leaf);
+            //path.strokeColor = 'black';
+            
+            if (random() < 0.75) drawRock(leaf);
+        }
+    })
 
     // Set the "background color" by drawing a full-screen rectangle
     let background = new Path.Rectangle(origin, view.size);
     background.fillColor = '#ffffff'
+
+    //applyGrainToPath(background, 10_000, 2.25, 14.0);
 }
